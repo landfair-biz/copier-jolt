@@ -247,7 +247,12 @@ class Question:
             Jinja template that displays a warning after the user submits an
             answer without preventing them from continuing.
 
+        pre_tasks:
+            Commands that run before the question is displayed. Their output is
+            available to question templates as ``_pre_tasks.<name>``.
+
         style:
+
             Prompt-toolkit style rules for prompt parts such as ``question`` and
             ``answer``. For example, ``{"question": "bold fg:ansiblue"}``.
 
@@ -275,7 +280,9 @@ class Question:
     type: str = Field(default="", validate_default=True)
     validator: str = ""
     warning: str = ""
+    pre_tasks: Sequence[dict[str, Any]] = field(default_factory=list)
     style: dict[str, str] = Field(default_factory=dict)
+
     when: str | bool = True
 
     @field_validator("var_name")

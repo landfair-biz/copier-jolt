@@ -323,6 +323,24 @@ Supported keys:
         warning: "{% if project_name | length < 5 %}Short names can be hard to find.{% endif %}"
     ```
 
+- **pre_tasks**: Commands to run before displaying a question. A pre-task must define a
+    `name` and `command`; its `stdout`, `stderr`, and newline-separated `lines` are made
+    available in prompt templates as `_pre_tasks.<name>`. Pre-tasks are unsafe code, so
+    they require the same trusted-template approval as regular tasks. They are skipped
+    when Copier is run with `--skip-tasks`.
+
+    ```yaml title="copier.yml"
+    network_interface:
+        type: str
+        pre_tasks:
+            - name: nics
+              command: [sh, -c, "ls /sys/class/net"]
+        choices: |
+            {% for nic in _pre_tasks.nics.lines %}
+            - {{ nic }}
+            {% endfor %}
+    ```
+
 - **when**: Condition that, if `false`, skips the question.
 
     If it is a boolean, it is used directly. Setting it to `false` is useful for

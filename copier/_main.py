@@ -266,6 +266,7 @@ class Worker:
     ask: Sequence[str] = ()
 
     answers: AnswersMap = field(default_factory=AnswersMap, init=False)
+    _prompt_data: AnyByStrDict = field(default_factory=dict, init=False)
     _cleanup_hooks: list[Callable[[], None]] = field(default_factory=list, init=False)
 
     def __enter__(self) -> Self:
@@ -310,7 +311,13 @@ class Worker:
             features.add("jinja_extensions")
         if self.template.tasks and not self.skip_tasks:
             features.add("tasks")
+        if (
+            not self.skip_tasks
+            and any(details.get("pre_tasks") for details in self.template.questions_data.values())
+        ):
+            features.add("pre_tasks")
         if mode == "update" and self.subproject.template:
+
             if self.subproject.template.jinja_extensions:
                 features.add("jinja_extensions")
             if self.subproject.template.tasks:
@@ -390,6 +397,42 @@ class Worker:
             and isinstance(v, JSONSerializable)
         )
         return answers
+
+    def _execute_prompt_pre_tasks(self, question: Question) -> None:
+        """Run a question's trusted pre-tasks and make their output available."""
+        if self.skip_tasks:
+            return
+        for task in question.pre_tasks:
+            name = task.get("name")
+            command = task.get("command")
+            if not isinstance(name, str) or not name.isidentifier() or command is None:
+                raise ValueError("Prompt pre-task requires a valid 'name' and 'command'")
+            if not cast_to_bool(self._render_value(task.get("when", True))):
+                continue
+            if isinstance(command, str):
+                rendered_command: str | list[str] = self._render_string(command)
+                use_shell = True
+            else:
+                rendered_command = [self._render_string(str(part)) for part in command]
+                use_shell = False
+            if self.pretend:
+                self._prompt_data[name] = {"stdout": "", "stderr": "", "lines": []}
+                continue
+            process = subprocess.run(
+                rendered_command,
+                shell=use_shell,
+                check=False,
+                capture_output=True,
+                text=True,
+                cwd=self.template.local_abspath,
+            )
+            if process.returncode:
+                raise TaskError.from_process(process)
+            self._prompt_data[name] = {
+                "stdout": process.stdout,
+                "stderr": process.stderr,
+                "lines": process.stdout.splitlines(),
+            }
 
     def _execute_tasks(self, tasks: Sequence[Task]) -> None:
         """Run the given tasks.
@@ -472,7 +515,9 @@ class Worker:
             **self.answers.combined,
             _copier_answers=self._answers_to_remember(),
             _copier_conf=conf,
+            _pre_tasks=self._prompt_data,
             _folder_name=self.subproject.local_abspath.name,
+
             _copier_python=sys.executable,
             _copier_phase=Phase.current(),
         )
@@ -619,7 +664,10 @@ class Worker:
                 var_name=var_name,
                 **details,
             )
+            self._execute_prompt_pre_tasks(question)
+            question.context = self._render_context()
             # Delete last answer if it cannot be parsed or validated, so a new
+
             # valid answer can be provided.
             if var_name in self.answers.last:
                 try:

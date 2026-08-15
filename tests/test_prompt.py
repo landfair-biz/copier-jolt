@@ -1640,3 +1640,39 @@ def test_inline_prompt_markup(tmp_path_factory: pytest.TempPathFactory, spawn: S
     tui.sendline()
     tui.expect_exact(pexpect.EOF)
     assert load_answersfile_data(dst)["project_name"] == "my-project"
+
+
+
+def test_prompt_pre_task_populates_choices(
+    tmp_path_factory: pytest.TempPathFactory, spawn: Spawn
+) -> None:
+    """A prompt pre-task can provide dynamic choices from command output."""
+    src, dst = map(tmp_path_factory.mktemp, ("src", "dst"))
+    build_file_tree(
+        {
+            (src / "copier.yml"): yaml.dump(
+                {
+                    "network_interface": {
+                        "type": "str",
+                        "pre_tasks": [
+                            {
+                                "name": "nics",
+                                "command": [
+                                    sys.executable,
+                                    "-c",
+                                    "print('eth0'); print('wlan0')",
+                                ],
+                            }
+                        ],
+                        "choices": "{% for nic in _pre_tasks.nics.lines %}\n- {{ nic }}\n{% endfor %}",
+                    }
+                }
+            ),
+            (src / "{{ _copier_conf.answers_file }}.jinja"): "{{ _copier_answers|to_nice_yaml }}",
+        }
+    )
+    tui = spawn(COPIER_PATH + ("copy", str(src), str(dst), "--trust"))
+    expect_prompt(tui, "network_interface", "str")
+    tui.sendline(Keyboard.Down)
+    tui.expect_exact(pexpect.EOF)
+    assert load_answersfile_data(dst)["network_interface"] == "wlan0"
