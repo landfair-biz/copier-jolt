@@ -48,6 +48,9 @@ OS: Literal["linux", "macos", "windows"] | None = cast(
 )
 
 
+COPIER_DISTRIBUTION_NAME = "copier-jolt"
+
+
 def copier_version() -> Version:
     """Get closest match for the installed copier version."""
     # Importing __version__ at the top of the module creates a circular import
@@ -59,7 +62,7 @@ def copier_version() -> Version:
         return Version(__version__)
 
     # Get the installed package version otherwise, which is sometimes more specific
-    return Version(version("copier"))
+    return Version(version(COPIER_DISTRIBUTION_NAME))
 
 
 def printf(
