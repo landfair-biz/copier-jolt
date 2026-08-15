@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. This projec
 adheres to [PEP 440](https://www.python.org/dev/peps/pep-0440/) versioning schema, and
 the changelog itself conforms to [Keep A Changelog](https://keepachangelog.com/).
 
+## v9.18.0
+
+### Feat
+
+- add prompt navigation for reviewing and editing interactive answers
+- add inline bold and color formatting for question help and string defaults
+- add non-blocking prompt warnings, including live warnings for string inputs
+- add question pre-tasks for generating dynamic prompt data from trusted commands
+
 ## v9.17.1 (2026-08-04)
 
 ### Security
