@@ -18,6 +18,7 @@ In addition to the standard Copier workflow, this fork adds the following featur
 | **Inline prompt formatting** | Use bold text and prompt-toolkit colors inside `help` text and string defaults. |
 | **Non-blocking warnings** | Give users contextual guidance without rejecting their answer. String warnings update while the user types. |
 | **Question pre-tasks** | Run a trusted command before a question and use its output to build dynamic prompt choices. |
+| **Dynamic question groups** | Repeat a set of related questions based on an earlier answer and save the results as a list of mappings. |
 
 These additions are opt-in: templates without the new settings continue to use the familiar Copier behavior.
 
@@ -166,7 +167,7 @@ project_name:
     {% endif %}
 ```
 
-For string questions without `choices`, the warning appears in the prompt's bottom toolbar while the user types and disappears as soon as the condition is resolved. In this example, the message clears once the name has five or more characters.
+For string questions without `choices`, the warning appears in the prompt's bottom toolbar while the user types and disappears as soon as the condition is resolved. Choice prompts show the warning for the highlighted option. In this example, the message clears once the name has five or more characters.
 
 Warnings can guide users about conventions without forbidding exceptions:
 
@@ -237,6 +238,43 @@ deployment_region:
 ```
 
 > **Security:** Pre-tasks execute commands with the same permissions as the person running Copier. Only use templates you trust. Pre-tasks use the same trusted-template approval flow as normal template tasks and are skipped when running with `--skip-tasks`.
+
+### Ask a dynamic group of questions
+
+Use a dynamic question group when an earlier response determines how many similarly structured records you need. Define `repeat` with a value or Jinja expression that resolves to a non-negative integer, then define the fields for each entry in `questions`.
+
+```yaml
+elasticsearch_node_count:
+  type: int
+  help: How many Elasticsearch nodes are in the cluster?
+
+elasticsearch_nodes:
+  repeat: "{{ elasticsearch_node_count }}"
+  questions:
+    hostname:
+      type: str
+      help: "Hostname for node {{ _repeat.number }} of {{ _repeat.count }}"
+    mac_address:
+      type: str
+      help: "MAC address for node {{ _repeat.number }}"
+    ip_address:
+      type: str
+      help: "IP address for node {{ _repeat.number }}"
+```
+
+For a count of `2`, the answers file receives one list under `elasticsearch_nodes`:
+
+```yaml
+elasticsearch_nodes:
+  - hostname: es-1
+    mac_address: "00:11:22:33:44:55"
+    ip_address: 10.0.0.11
+  - hostname: es-2
+    mac_address: "00:11:22:33:44:66"
+    ip_address: 10.0.0.12
+```
+
+Inside repeated prompts, `_repeat.index` is zero-based, `_repeat.number` is one-based, `_repeat.count` is the total number of records, and `_repeat.group` is the group name. The resulting list is available to files and later prompts as `elasticsearch_nodes`.
 
 ## Combining the features
 

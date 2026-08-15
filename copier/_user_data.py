@@ -534,6 +534,8 @@ class Question:
             result["validate"] = _validate
         if self.supports_live_warning():
             result["bottom_toolbar"] = self.get_live_warning
+        elif self.choices and self.warning:
+            result["bottom_toolbar"] = self.get_choice_warning
         result.update({"type": questionary_type})
 
         return result
@@ -571,6 +573,18 @@ class Question:
         try:
             answer = self.parse_answer(get_app().current_buffer.text)
             warning = self.get_warning(answer)
+        except Exception:  # noqa: BLE001
+            return FormattedText()
+        return FormattedText(
+            [("bold fg:ansiyellow", f"Warning: {warning}")] if warning else []
+        )
+
+    def get_choice_warning(self) -> FormattedText:
+        """Render a warning for the choice currently highlighted in a prompt."""
+        try:
+            control = get_app().layout.current_control
+            selected = control.get_selected_choice()
+            warning = self.get_warning(self.cast_answer(selected.value))
         except Exception:  # noqa: BLE001
             return FormattedText()
         return FormattedText(

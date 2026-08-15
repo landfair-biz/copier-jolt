@@ -311,9 +311,17 @@ class Worker:
             features.add("jinja_extensions")
         if self.template.tasks and not self.skip_tasks:
             features.add("tasks")
-        if (
-            not self.skip_tasks
-            and any(details.get("pre_tasks") for details in self.template.questions_data.values())
+        if not self.skip_tasks and any(
+            details.get("pre_tasks")
+            or any(
+                isinstance(field, dict) and field.get("pre_tasks")
+                for field in (
+                    details.get("questions", {}).values()
+                    if isinstance(details.get("questions"), dict)
+                    else ()
+                )
+            )
+            for details in self.template.questions_data.values()
         ):
             features.add("pre_tasks")
         if mode == "update" and self.subproject.template:
@@ -641,10 +649,87 @@ class Worker:
             return is_dir
         return self._solve_render_conflict(dst_relpath)
 
+    def _expand_dynamic_question(
+        self, var_name: str, details: AnyByStrDict
+    ) -> list[tuple[str, AnyByStrDict]] | None:
+        """Expand a repeated question group using the answers collected so far."""
+        if "repeat" not in details and "questions" not in details:
+            return None
+        repeat = details.get("repeat")
+        fields = details.get("questions")
+        if repeat is None or not isinstance(fields, dict):
+            raise ValueError(
+                f'Dynamic question "{var_name}" requires both "repeat" and "questions"'
+            )
+        try:
+            count = int(self._render_value(repeat))
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f'Dynamic question "{var_name}" repeat must render to an integer'
+            ) from error
+        if count < 0:
+            raise ValueError(f'Dynamic question "{var_name}" repeat cannot be negative')
+
+        if var_name in self.answers.init:
+            value = self.answers.init[var_name]
+            if not isinstance(value, list):
+                raise ValueError(f'Dynamic question "{var_name}" requires a list answer')
+            self.answers.user[var_name] = value
+            return []
+        previous_answers = self.answers.last.get(var_name, [])
+        if previous_answers and not isinstance(previous_answers, list):
+            raise ValueError(f'Dynamic question "{var_name}" requires a list answer')
+        if self.skip_answered and previous_answers:
+            self.answers.user[var_name] = previous_answers
+            return []
+
+        self.answers.user[var_name] = [{} for _ in range(count)]
+        expanded: list[tuple[str, AnyByStrDict]] = []
+
+        for index in range(count):
+            for field_name, field_details in fields.items():
+                if not isinstance(field_name, str):
+                    raise ValueError(
+                        f'Dynamic question "{var_name}" has an invalid field name'
+                    )
+                field_config = (
+                    dict(field_details)
+                    if isinstance(field_details, dict)
+                    else {"default": field_details}
+                )
+                if index < len(previous_answers) and isinstance(
+                    previous_answers[index], dict
+                ) and field_name in previous_answers[index]:
+                    field_config["default"] = previous_answers[index][field_name]
+                field_config["_dynamic_group"] = (var_name, index, field_name, count)
+
+                expanded.append((f"{var_name}_{index + 1}_{field_name}", field_config))
+        return expanded
+
+    def _record_answer(
+        self,
+        var_name: str,
+        answer: Any,
+        dynamic_group: tuple[str, int, str, int] | None = None,
+    ) -> None:
+        """Store an answer and keep its dynamic group answer in sync."""
+        self.answers.user[var_name] = answer
+        if dynamic_group is None:
+            return
+        group_name, index, field_name, count = dynamic_group
+        group_answers = self.answers.user.get(group_name)
+        if not isinstance(group_answers, list):
+            group_answers = [{} for _ in range(count)]
+            self.answers.user[group_name] = group_answers
+        while len(group_answers) < count:
+            group_answers.append({})
+        group_answers[index][field_name] = answer
+
     def _ask(self) -> None:  # noqa: C901
         """Ask the questions of the questionnaire and record their answers."""
         self.answers = AnswersMap(
             user_defaults=self.user_defaults,
+
             init=self.data,
             last=self.subproject.last_answers,
             metadata=self.template.metadata,
@@ -656,16 +741,42 @@ class Worker:
         question_index = 0
         while question_index < len(questions):
             var_name, details = questions[question_index]
+            if expanded_questions := self._expand_dynamic_question(var_name, details):
+                questions[question_index : question_index + 1] = expanded_questions
+                continue
+            if "repeat" in details or "questions" in details:
+                question_index += 1
+                continue
+            question_details = dict(details)
+            dynamic_group = question_details.pop("_dynamic_group", None)
+            context = self._render_context()
+            if dynamic_group is not None:
+                group_name, index, _, count = dynamic_group
+                context["_repeat"] = {
+                    "group": group_name,
+                    "index": index,
+                    "number": index + 1,
+                    "count": count,
+                }
             question = Question(
                 answers=self.answers,
-                context=self._render_context(),
+                context=context,
                 jinja_env=self.jinja_env,
                 settings=self.settings,
                 var_name=var_name,
-                **details,
+                **question_details,
             )
             self._execute_prompt_pre_tasks(question)
+
             question.context = self._render_context()
+            if dynamic_group is not None:
+                group_name, index, _, count = dynamic_group
+                question.context["_repeat"] = {
+                    "group": group_name,
+                    "index": index,
+                    "number": index + 1,
+                    "count": count,
+                }
             # Delete last answer if it cannot be parsed or validated, so a new
 
             # valid answer can be provided.
@@ -697,7 +808,7 @@ class Worker:
                     # the answer value.
                     answer = question.parse_answer(self.answers.init[var_name])
                     question.validate_answer(answer)
-                    self.answers.user[var_name] = answer
+                    self._record_answer(var_name, answer, dynamic_group)
                     question_index += 1
                     continue
                 if self.skip_answered and var_name in self.answers.last:
@@ -707,7 +818,7 @@ class Worker:
                     answer = question.get_default()
                     if answer is MISSING:
                         raise ValueError(f'Question "{var_name}" is required')
-                    self.answers.user[var_name] = answer
+                    self._record_answer(var_name, answer, dynamic_group)
                     question_index += 1
                     continue
 
@@ -731,11 +842,12 @@ class Worker:
                 raise CopierAnswersInterrupt(
                     self.answers, question, self.template
                 ) from err
-            self.answers.user[var_name] = new_answer
+            self._record_answer(var_name, new_answer, dynamic_group)
             if not question.supports_live_warning() and (
                 warning := question.get_warning(new_answer)
             ):
                 printf("warning", warning, style=Style.WARNING, file_=sys.stderr)
+
             editable_indices.add(question_index)
 
             question_index += 1

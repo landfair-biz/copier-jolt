@@ -311,11 +311,11 @@ Supported keys:
                 {% endif %}
         ```
 
-- **warning**: Jinja template that is rendered while the user types into string prompts.
-    Like `validator`, it should render nothing when no warning applies, or render the
-    warning message otherwise. The warning disappears as soon as its condition is
-    satisfied and never prevents the user from continuing. Other prompt types show the
-    warning after submission.
+- **warning**: Jinja template that displays non-blocking guidance. For string prompts,
+    it is rendered while the user types; for prompts with choices, it is rendered for
+    the highlighted choice. The warning disappears as soon as its condition is satisfied
+    and never prevents the user from continuing. Other prompt types show the warning
+    after submission.
 
     ```yaml title="copier.yml"
     project_name:
@@ -341,9 +341,47 @@ Supported keys:
             {% endfor %}
     ```
 
+- **repeat** and **questions**: Define a dynamic question group. `repeat` renders to
+    the number of entries to collect, and `questions` defines the fields asked for each
+    entry. The final answer is a list of mappings stored under the group name. Within a
+    repeated field, `_repeat.index` (zero-based), `_repeat.number` (one-based),
+    `_repeat.count`, and `_repeat.group` are available in prompt templates.
+
+    ```yaml title="copier.yml"
+    elasticsearch_node_count:
+        type: int
+        help: How many Elasticsearch nodes are in this cluster?
+
+    elasticsearch_nodes:
+        repeat: "{{ elasticsearch_node_count }}"
+        questions:
+            hostname:
+                type: str
+                help: "Hostname for node {{ _repeat.number }} of {{ _repeat.count }}"
+            mac_address:
+                type: str
+                help: "MAC address for {{ _repeat.group }} node {{ _repeat.number }}"
+            ip_address:
+                type: str
+                help: "IP address for node {{ _repeat.number }}"
+    ```
+
+    The example stores an answer shaped like:
+
+    ```yaml
+    elasticsearch_nodes:
+        - hostname: es-1
+          mac_address: "00:11:22:33:44:55"
+          ip_address: 10.0.0.11
+        - hostname: es-2
+          mac_address: "00:11:22:33:44:66"
+          ip_address: 10.0.0.12
+    ```
+
 - **when**: Condition that, if `false`, skips the question.
 
     If it is a boolean, it is used directly. Setting it to `false` is useful for
+
     creating a computed value.
 
     If it is a string, it is converted to boolean using a parser similar to YAML, but

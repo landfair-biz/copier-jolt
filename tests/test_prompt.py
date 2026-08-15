@@ -1676,3 +1676,67 @@ def test_prompt_pre_task_populates_choices(
     tui.sendline(Keyboard.Down)
     tui.expect_exact(pexpect.EOF)
     assert load_answersfile_data(dst)["network_interface"] == "wlan0"
+
+
+def test_choice_warning_is_displayed(
+    tmp_path_factory: pytest.TempPathFactory, spawn: Spawn
+) -> None:
+    """Warnings for selected choices remain visible to interactive users."""
+    src, dst = map(tmp_path_factory.mktemp, ("src", "dst"))
+    build_file_tree(
+        {
+            (src / "copier.yml"): yaml.dump(
+                {
+                    "deployment": {
+                        "type": "str",
+                        "choices": ["production", "development"],
+                        "warning": (
+                            "{% if deployment == 'production' %}"
+                            "Production changes require approval.{% endif %}"
+                        ),
+                    }
+                }
+            ),
+            (src / "{{ _copier_conf.answers_file }}.jinja"): "{{ _copier_answers|to_nice_yaml }}",
+        }
+    )
+    tui = spawn(COPIER_PATH + ("copy", str(src), str(dst)))
+    expect_prompt(tui, "deployment", "str")
+    tui.expect_exact("Production changes require approval.")
+    tui.sendline()
+    tui.expect_exact(pexpect.EOF)
+    assert load_answersfile_data(dst)["deployment"] == "production"
+
+
+def test_dynamic_question_group(tmp_path_factory: pytest.TempPathFactory, spawn: Spawn) -> None:
+    """Repeated questions collect a list of mappings under their group name."""
+    src, dst = map(tmp_path_factory.mktemp, ("src", "dst"))
+    build_file_tree(
+        {
+            (src / "copier.yml"): yaml.dump(
+                {
+                    "node_count": {"type": "int", "default": 2},
+                    "elasticsearch_nodes": {
+                        "repeat": "{{ node_count }}",
+                        "questions": {
+                            "hostname": {
+                                "type": "str",
+                                "default": "es-{{ _repeat.number }}",
+                            },
+                            "ip_address": {
+                                "type": "str",
+                                "default": "10.0.0.{{ _repeat.number }}",
+                            },
+                        },
+                    },
+                }
+            ),
+            (src / "{{ _copier_conf.answers_file }}.jinja"): "{{ _copier_answers|to_nice_yaml }}",
+        }
+    )
+    tui = spawn(COPIER_PATH + ("copy", str(src), str(dst), "--defaults"))
+    tui.expect_exact(pexpect.EOF)
+    assert load_answersfile_data(dst)["elasticsearch_nodes"] == [
+        {"hostname": "es-1", "ip_address": "10.0.0.1"},
+        {"hostname": "es-2", "ip_address": "10.0.0.2"},
+    ]
