@@ -377,6 +377,12 @@ Supported keys:
           mac_address: "00:11:22:33:44:66"
           ip_address: 10.0.0.12
     ```
+    Which you could then retreive and use like:
+    ```yaml
+        es_output:
+          type: str
+          help: "The first hostname is {{ elasticsearch_nodes[0].hostname }} and its IP is {{ elasticsearch_nodes[0].ip_address }}"
+    ```
 
 - **when**: Condition that, if `false`, skips the question.
 
