@@ -312,10 +312,10 @@ Supported keys:
         ```
 
 - **warning**: Jinja template that displays non-blocking guidance. For string prompts,
-    it is rendered while the user types; for prompts with choices, it is rendered for
-    the highlighted choice. The warning disappears as soon as its condition is satisfied
-    and never prevents the user from continuing. Other prompt types show the warning
-    after submission.
+    it is rendered while the user types; for prompts with choices, it is shown alongside
+    each choice that triggers it. The warning disappears as soon as its condition is
+    satisfied and never prevents the user from continuing. Other prompt types show the
+    warning after submission.
 
     ```yaml title="copier.yml"
     project_name:

@@ -434,7 +434,9 @@ class Question:
             c = Choice(name, self.render_value(value), disabled=disabled)
             # Try to cast the value according to the question's type to raise
             # an error in case the value is incompatible.
-            self.cast_answer(c.value)
+            answer = self.cast_answer(c.value)
+            if warning := self.get_warning(answer):
+                c = Choice(f"{name} — Warning: {warning}", c.value, disabled=disabled)
             result.append(c)
         return result
 
@@ -534,8 +536,6 @@ class Question:
             result["validate"] = _validate
         if self.supports_live_warning():
             result["bottom_toolbar"] = self.get_live_warning
-        elif self.choices and self.warning:
-            result["bottom_toolbar"] = self.get_choice_warning
         result.update({"type": questionary_type})
 
         return result
@@ -579,20 +579,9 @@ class Question:
             [("bold fg:ansiyellow", f"Warning: {warning}")] if warning else []
         )
 
-    def get_choice_warning(self) -> FormattedText:
-        """Render a warning for the choice currently highlighted in a prompt."""
-        try:
-            control = get_app().layout.current_control
-            selected = control.get_selected_choice()
-            warning = self.get_warning(self.cast_answer(selected.value))
-        except Exception:  # noqa: BLE001
-            return FormattedText()
-        return FormattedText(
-            [("bold fg:ansiyellow", f"Warning: {warning}")] if warning else []
-        )
-
     def supports_live_warning(self) -> bool:
         """Whether this prompt can display a warning as the user types."""
+
         return bool(self.warning) and not self.choices and self.get_type_name() == "str"
 
     def get_when(self) -> bool:
