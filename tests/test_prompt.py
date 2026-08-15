@@ -1595,9 +1595,11 @@ def test_warning_and_prompt_navigation(
     )
     tui = spawn(COPIER_PATH + ("copy", str(src), str(dst)))
     expect_prompt(tui, "project_name", "str")
-    tui.sendline("risky")
+    tui.send("risky")
     tui.expect_exact("Choose a more specific name.")
+    tui.sendline()
     expect_prompt(tui, "package_name", "str")
+
     tui.sendline("risky-package")
     tui.expect_exact("Review or edit answers?")
     tui.sendline("y")

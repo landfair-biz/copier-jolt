@@ -311,10 +311,11 @@ Supported keys:
                 {% endif %}
         ```
 
-- **warning**: Jinja template that is rendered after a user submits an answer. Like
-    `validator`, it should render nothing when no warning applies, or render the
-    warning message otherwise. Unlike `validator`, it never prevents the user from
-    continuing.
+- **warning**: Jinja template that is rendered while the user types into string prompts.
+    Like `validator`, it should render nothing when no warning applies, or render the
+    warning message otherwise. The warning disappears as soon as its condition is
+    satisfied and never prevents the user from continuing. Other prompt types show the
+    warning after submission.
 
     ```yaml title="copier.yml"
     project_name:

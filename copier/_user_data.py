@@ -18,7 +18,9 @@ from typing import Any, Literal
 
 import yaml
 from jinja2 import StrictUndefined, UndefinedError
+from prompt_toolkit.application import get_app
 from prompt_toolkit.formatted_text import FormattedText
+
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.styles import Style as PromptStyle
 from pydantic import ConfigDict, Field, field_validator
@@ -523,7 +525,10 @@ class Question:
             questionary_type = "path"
         if questionary_type in {"input", "checkbox", "password", "path"}:
             result["validate"] = _validate
+        if self.supports_live_warning():
+            result["bottom_toolbar"] = self.get_live_warning
         result.update({"type": questionary_type})
+
         return result
 
     def get_type_name(self) -> str:
@@ -554,7 +559,23 @@ class Question:
         """Render the non-blocking warning for an answer, if any."""
         return self.render_value(self.warning, {self.var_name: answer}).strip()
 
+    def get_live_warning(self) -> FormattedText:
+        """Render a warning for the current input buffer without blocking it."""
+        try:
+            answer = self.parse_answer(get_app().current_buffer.text)
+            warning = self.get_warning(answer)
+        except Exception:  # noqa: BLE001
+            return FormattedText()
+        return FormattedText(
+            [("bold fg:ansiyellow", f"Warning: {warning}")] if warning else []
+        )
+
+    def supports_live_warning(self) -> bool:
+        """Whether this prompt can display a warning as the user types."""
+        return bool(self.warning) and not self.choices and self.get_type_name() == "str"
+
     def get_when(self) -> bool:
+
         """Get skip condition for question."""
         return cast_to_bool(self.render_value(self.when))
 

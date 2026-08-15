@@ -684,9 +684,12 @@ class Worker:
                     self.answers, question, self.template
                 ) from err
             self.answers.user[var_name] = new_answer
-            if warning := question.get_warning(new_answer):
+            if not question.supports_live_warning() and (
+                warning := question.get_warning(new_answer)
+            ):
                 printf("warning", warning, style=Style.WARNING, file_=sys.stderr)
             editable_indices.add(question_index)
+
             question_index += 1
 
             if question_index == len(questions) and editable_indices and cast_to_bool(
