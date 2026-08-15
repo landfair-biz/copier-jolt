@@ -62,3 +62,4 @@ htmlcov/
 # Nix
 /.direnv
 .dyad/
+AI_RULES.md
