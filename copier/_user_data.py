@@ -18,6 +18,7 @@ from typing import Any, Literal
 import yaml
 from jinja2 import StrictUndefined, UndefinedError
 from prompt_toolkit.lexers import PygmentsLexer
+from prompt_toolkit.styles import Style as PromptStyle
 from pydantic import ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass
 from pydantic_core.core_schema import ValidationInfo
@@ -195,7 +196,16 @@ class Question:
             render *nothing* if the value is valid, and an error message to show
             to the user otherwise.
 
+        warning:
+            Jinja template that displays a warning after the user submits an
+            answer without preventing them from continuing.
+
+        style:
+            Prompt-toolkit style rules for prompt parts such as ``question`` and
+            ``answer``. For example, ``{"question": "bold fg:ansiblue"}``.
+
         when:
+
             Condition that, if `False`, skips the question. Can be templated.
             If it is a boolean, it is used directly. If it is a str, it is
             converted to boolean using a parser similar to YAML, but only for
@@ -217,6 +227,8 @@ class Question:
     secret: bool = False
     type: str = Field(default="", validate_default=True)
     validator: str = ""
+    warning: str = ""
+    style: dict[str, str] = Field(default_factory=dict)
     when: str | bool = True
 
     @field_validator("var_name")
@@ -401,8 +413,10 @@ class Question:
             "mouse_support": True,
             "name": self.var_name,
             "qmark": self.qmark or ("🕵️" if self.secret else "🎤"),
+            "style": PromptStyle.from_dict(self.style) if self.style else None,
             "when": lambda _: self.get_when(),
         }
+
         default = self.get_default_rendered()
         if default is not MISSING:
             result["default"] = default
@@ -466,6 +480,10 @@ class Question:
                 f"Validation error for question '{self.var_name}': {err_msg}"
             )
 
+    def get_warning(self, answer: Any) -> str:
+        """Render the non-blocking warning for an answer, if any."""
+        return self.render_value(self.warning, {self.var_name: answer}).strip()
+
     def get_when(self) -> bool:
         """Get skip condition for question."""
         return cast_to_bool(self.render_value(self.when))
@@ -473,6 +491,7 @@ class Question:
     def render_value(
         self, value: Any, extra_answers: AnyByStrDict | None = None
     ) -> Any:
+
         """Render a single templated value using Jinja.
 
         If the value cannot be used as a template, it will be returned as is.

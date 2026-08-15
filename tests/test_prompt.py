@@ -1564,3 +1564,51 @@ def test_copy_defaults_with_ask_and_data(
         tui.expect_exact(pexpect.EOF)
         loaded_answers = load_answersfile_data(".")
         assert loaded_answers.get("what_does_it_eat") == "milk and cookies"
+
+
+
+def test_warning_and_prompt_navigation(
+    tmp_path_factory: pytest.TempPathFactory, spawn: Spawn
+) -> None:
+
+    """Warnings do not block answers, and prior answers can be reviewed."""
+    src, dst = map(tmp_path_factory.mktemp, ("src", "dst"))
+    build_file_tree(
+        {
+            (src / "copier.yml"): yaml.dump(
+                {
+                    "_prompt_navigation": True,
+                    "project_name": {
+                        "type": "str",
+                        "style": {"question": "bold fg:ansiblue"},
+                        "warning": (
+                            "{% if project_name == 'risky' %}"
+                            "Choose a more specific name.{% endif %}"
+                        ),
+                    },
+                    "package_name": {"type": "str"},
+
+                }
+            ),
+            (src / "{{ _copier_conf.answers_file }}.jinja"): "{{ _copier_answers|to_nice_yaml }}",
+        }
+    )
+    tui = spawn(COPIER_PATH + ("copy", str(src), str(dst)))
+    expect_prompt(tui, "project_name", "str")
+    tui.sendline("risky")
+    tui.expect_exact("Choose a more specific name.")
+    expect_prompt(tui, "package_name", "str")
+    tui.sendline("risky-package")
+    tui.expect_exact("Review or edit answers?")
+    tui.sendline("y")
+    tui.expect_exact("Choose an answer to edit")
+    tui.sendline()
+    expect_prompt(tui, "project_name", "str")
+    tui.sendline("safe")
+    expect_prompt(tui, "package_name", "str")
+    tui.sendline("safe-package")
+    tui.expect_exact("Review or edit answers?")
+    tui.sendline("n")
+    tui.expect_exact(pexpect.EOF)
+    assert load_answersfile_data(dst)["project_name"] == "safe"
+    assert load_answersfile_data(dst)["package_name"] == "safe-package"

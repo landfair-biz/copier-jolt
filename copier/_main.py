@@ -605,7 +605,11 @@ class Worker:
             external=self._external_data(),
         )
 
-        for var_name, details in self.template.questions_data.items():
+        questions = list(self.template.questions_data.items())
+        editable_indices: set[int] = set()
+        question_index = 0
+        while question_index < len(questions):
+            var_name, details = questions[question_index]
             question = Question(
                 answers=self.answers,
                 context=self._render_context(),
@@ -633,6 +637,7 @@ class Worker:
                 # Skip immediately to the next question when it has no default
                 # value.
                 if question.get_default() is MISSING:
+                    question_index += 1
                     continue
 
             if not any(fnmatchcase(var_name, ask_pattern) for ask_pattern in self.ask):
@@ -644,14 +649,17 @@ class Worker:
                     answer = question.parse_answer(self.answers.init[var_name])
                     question.validate_answer(answer)
                     self.answers.user[var_name] = answer
+                    question_index += 1
                     continue
                 if self.skip_answered and var_name in self.answers.last:
+                    question_index += 1
                     continue
                 if self.defaults:
                     answer = question.get_default()
                     if answer is MISSING:
                         raise ValueError(f'Question "{var_name}" is required')
                     self.answers.user[var_name] = answer
+                    question_index += 1
                     continue
 
             # Display TUI and ask user interactively only without --defaults
@@ -669,6 +677,33 @@ class Worker:
                     self.answers, question, self.template
                 ) from err
             self.answers.user[var_name] = new_answer
+            if warning := question.get_warning(new_answer):
+                printf("warning", warning, style=Style.WARNING, file_=sys.stderr)
+            editable_indices.add(question_index)
+            question_index += 1
+
+            if question_index == len(questions) and editable_indices and cast_to_bool(
+                self.template.config_data.get("prompt_navigation", False)
+            ):
+                if not confirm("Review or edit answers?", default=False).unsafe_ask():
+                    break
+                choices = [questions[index][0] for index in sorted(editable_indices)]
+                selected = unsafe_prompt(
+                    [
+                        {
+                            "type": "select",
+                            "name": "question",
+                            "message": "Choose an answer to edit",
+                            "choices": choices,
+                        }
+                    ]
+                )["question"]
+                question_index = next(
+                    index for index, (name, _) in enumerate(questions) if name == selected
+                )
+                for index in editable_indices:
+                    if index >= question_index:
+                        self.answers.user.pop(questions[index][0], None)
 
         # Reload external data, which may depend on answers
         self.answers.external = self._external_data()

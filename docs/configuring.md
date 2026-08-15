@@ -80,6 +80,21 @@ Supported keys:
 
 - **help**: Additional text to help the user know what's this question for.
 
+- **style**: Prompt appearance rules for individual prompt parts. Use the
+    [prompt-toolkit style format](https://python-prompt-toolkit.readthedocs.io/en/stable/pages/asking_for_input.html#colors)
+    with any of `question`, `answer`, `qmark`, `pointer`, `highlighted`, and
+    `instruction`. This can make help text bold or color a default answer.
+
+    ```yaml title="copier.yml"
+    project_name:
+        type: str
+        help: Enter the name shown to your users.
+        default: my-project
+        style:
+            question: "bold fg:ansiblue"
+            answer: "fg:ansiyellow"
+    ```
+
 - **choices**: To restrict possible values.
 
     !!! tip
@@ -293,6 +308,17 @@ Supported keys:
                 {% endif %}
         ```
 
+- **warning**: Jinja template that is rendered after a user submits an answer. Like
+    `validator`, it should render nothing when no warning applies, or render the
+    warning message otherwise. Unlike `validator`, it never prevents the user from
+    continuing.
+
+    ```yaml title="copier.yml"
+    project_name:
+        type: str
+        warning: "{% if project_name | length < 5 %}Short names can be hard to find.{% endif %}"
+    ```
+
 - **when**: Condition that, if `false`, skips the question.
 
     If it is a boolean, it is used directly. Setting it to `false` is useful for
@@ -407,6 +433,23 @@ Supported keys:
             - [more than 10km, not so close]
             - [more than 100km, quite far away]
     ```
+
+#### Reviewing and editing answers
+
+Set `_prompt_navigation: true` in `copier.yml` to show a review step after the
+questionnaire. Users can choose any interactively answered question to edit; Copier then
+asks that question and the following questions again so dependent values are updated.
+
+```yaml title="copier.yml"
+_prompt_navigation: true
+
+project_name:
+    type: str
+
+package_name:
+    type: str
+    default: "{{ project_name | lower | replace(' ', '-') }}"
+```
 
 #### Prompt templating
 
