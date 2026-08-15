@@ -1,6 +1,6 @@
 [project]
 name = "copier-jolt"
-version = "9.18.0"
+version = "9.18.1"
 description = "JOLT-maintained fork of a library for rendering project templates."
 license = { text = "MIT" }
 requires-python = ">=3.10"
