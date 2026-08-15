@@ -1,229 +1,308 @@
-# ![Copier](https://github.com/copier-org/copier/raw/master/img/copier-logotype.png)
+# Copier JOLT
 
-[![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-purple.json)](https://github.com/copier-org/copier)
-[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/copier-org/copier)
-[![codecov](https://codecov.io/gh/copier-org/copier/branch/master/graph/badge.svg)](https://codecov.io/gh/copier-org/copier)
-[![CI](https://github.com/copier-org/copier/workflows/CI/badge.svg)](https://github.com/copier-org/copier/actions?query=branch%3Amaster)
-[![Checked with mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
-![Python](https://img.shields.io/pypi/pyversions/copier?logo=python&logoColor=%23959DA5)
-[![PyPI](https://img.shields.io/pypi/v/copier?logo=pypi&logoColor=%23959DA5)](https://pypi.org/project/copier/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Documentation Status](https://img.shields.io/readthedocs/copier/latest?logo=readthedocs)](https://copier.readthedocs.io/en/latest)
-[![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20Copier%20Guru-006BFF)](https://gurubase.io/g/copier)
+Copier JOLT is a JOLT-maintained fork of Copier for rendering and maintaining project templates.
 
-A JOLT-maintained library and CLI app for rendering project templates.
-Original project (which was forked) is: https://github.com/copier-org/copier
+> **Upstream credit:** This project began as a fork of [Copier](https://github.com/copier-org/copier).
 
-This version offers several additional benefits:
-- Navigation to previous prompts
-- Ability to change text colors and formats in "help" and "default" strings
-- Added `pre_tasks` which allows users to run commands and use the output within prompts
-- Added `warning` that works similarly to `validation` but allows users to proceed
+**Repository:** <https://github.com/landfair-biz/copier-jolt>
 
-- Works with **local** paths and **Git URLs**.
-- Your project can include any file and Copier can dynamically replace values in any
-    kind of text file.
-- It generates a beautiful output and takes care of not overwriting existing files
-    unless instructed to do so.
+Copier JOLT retains Copier's template rendering, answer management, Git-based template workflow, and update capabilities, while adding a more guided interactive prompting experience.
 
+## What is different in Copier JOLT?
+
+In addition to the standard Copier workflow, this fork adds the following features for template authors:
+
+| Feature | What it adds |
+| --- | --- |
+| **Prompt navigation** | Let users review and revise previously entered interactive answers before generation continues. |
+| **Inline prompt formatting** | Use bold text and prompt-toolkit colors inside `help` text and string defaults. |
+| **Non-blocking warnings** | Give users contextual guidance without rejecting their answer. String warnings update while the user types. |
+| **Question pre-tasks** | Run a trusted command before a question and use its output to build dynamic prompt choices. |
+
+These additions are opt-in: templates without the new settings continue to use the familiar Copier behavior.
 
 ## Installation
 
-1. Install Python 3.10 or newer.
-1. Install Git 2.27 or newer.
-1. To use as a CLI app: [`pipx install copier`](https://github.com/pypa/pipx) or
-   [`uv tool install copier`](https://docs.astral.sh/uv/#tool-management)
-1. To use as a library: `pip install copier` or `conda install -c conda-forge copier`
+Copier JOLT requires Python 3.10 or newer and Git 2.27 or newer.
 
-### Homebrew formula
-
-To install the latest Copier release using
-[its Homebrew formula](https://formulae.brew.sh/formula/copier) for macOS or Linux:
+Install the current version directly from this repository with your preferred Python tool:
 
 ```shell
-brew install copier
+pipx install git+https://github.com/landfair-biz/copier-jolt.git
+```
+
+```shell
+uv tool install git+https://github.com/landfair-biz/copier-jolt.git
+```
+
+Or install it into an existing Python environment:
+
+```shell
+pip install git+https://github.com/landfair-biz/copier-jolt.git
+```
+
+The command-line program remains `copier`:
+
+```shell
+copier --help-all
 ```
 
 ## Quick start
 
-To create a template:
+A template is a directory containing a `copier.yml` (or `copier.yaml`) configuration file and the files to render.
 
-```shell
-📁 my_copier_template                        # your template project
-├── 📄 copier.yml                            # your template configuration
-├── 📁 .git/                                 # your template is a Git repository
-├── 📁 {{project_name}}                      # a folder with a templated name
-│   └── 📄 {{module_name}}.py.jinja          # a file with a templated name
-└── 📄 {{_copier_conf.answers_file}}.jinja   # answers are recorded here
+```text
+my-template/
+├── copier.yml
+├── {{ project_name }}/
+│   └── README.md.jinja
+└── {{ _copier_conf.answers_file }}.jinja
 ```
 
-Content of the `copier.yml` file:
+A minimal `copier.yml`:
 
-```yaml title="copier.yml"
-# questions
+```yaml
 project_name:
-    type: str
-    help: What is your project name?
+  type: str
+  help: What is your project name?
 
 module_name:
-    type: str
-    help: What is your Python module name?
+  type: str
+  help: What is your Python module name?
 ```
 
-Content of the `{{project_name}}/{{module_name}}.py.jinja` file:
+A templated file, `{{ project_name }}/README.md.jinja`:
 
-```python+jinja title="{{project_name}}/{{module_name}}.py.jinja"
-print("Hello from {{module_name}}!")
+```markdown
+# {{ project_name }}
+
+Python package: `{{ module_name }}`
 ```
 
-Content of the `{{_copier_conf.answers_file}}.jinja` file:
+Generate a project from a local template:
 
-```yaml+jinja title="{{_copier_conf.answers_file}}.jinja"
-# Changes here will be overwritten by Copier
-{{ _copier_answers|to_nice_yaml -}}
+```shell
+copier copy path/to/my-template path/to/new-project
 ```
 
-To generate a project from the template:
+Templates may also be Git URLs or shortcuts such as `gh:organization/template`. To use this fork itself as a template source, use:
 
-- On the command-line:
-
-    ```shell
-    copier copy path/to/project/template path/to/destination
-    ```
-
-- Or in Python code, programmatically:
-
-    ```python
-    from copier import run_copy
-
-    # Create a project from a local path
-    run_copy("path/to/project/template", "path/to/destination")
-
-    # Or from a Git URL.
-    run_copy("https://github.com/copier-org/copier.git", "path/to/destination")
-
-    # You can also use "gh:" as a shortcut of "https://github.com/"
-    run_copy("gh:copier-org/copier.git", "path/to/destination")
-
-    # Or "gl:" as a shortcut of "https://gitlab.com/"
-    run_copy("gl:copier-org/copier.git", "path/to/destination")
-    ```
-
-## Basic concepts
-
-Copier is composed of these main concepts:
-
-1. **Templates**. They lay out how to generate the subproject.
-1. **Questionnaires**. They are configured in the template. Answers are used to generate
-   projects.
-1. **Projects**. This is where your real program lives. But it is usually generated
-   and/or updated from a template.
-
-Copier targets these main human audiences:
-
-1. **Template creators**. Programmers that repeat code too much and prefer a tool to do
-    it for them.
-
-    **_Tip:_** Copier doesn't replace the DRY principle... but sometimes you simply
-    can't be DRY and you need a DRYing machine...
-
-1. **Template consumers**. Programmers that want to start a new project quickly, or
-    that want to evolve it comfortably.
-
-Non-humans should be happy also by using Copier's CLI or API, as long as their
-expectations are the same as for those humans... and as long as they have feelings.
-
-Templates have these goals:
-
-1. **[Code scaffolding](<https://en.wikipedia.org/wiki/Scaffold_(programming)>)**. Help
-   consumers have a working source code tree as quickly as possible. All templates allow
-   scaffolding.
-1. **Code lifecycle management**. When the template evolves, let consumers update their
-   projects. Not all templates allow updating.
-
-Copier tries to have a smooth learning curve that lets you create simple templates that
-can evolve into complex ones as needed.
-
-## Browse or tag public templates
-
-You can browse public Copier templates on GitHub using
-[the `copier-template` topic](https://github.com/topics/copier-template). Use them as
-inspiration!
-
-If you want your template to appear in that list, just add the topic to it! 🏷
-
-## Show your support
-
-If you're using Copier, consider adding the Copier badge to your project's `README.md`:
-
-```md
-[![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
+```shell
+copier copy https://github.com/landfair-biz/copier-jolt.git path/to/destination
 ```
 
-...or `README.rst`:
+You can also call Copier JOLT from Python:
 
-```rst
-.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json
-    :target: https://github.com/copier-org/copier
-    :alt: Copier
+```python
+from copier import run_copy
+
+run_copy("path/to/my-template", "path/to/new-project")
 ```
 
-...or, as HTML:
+## JOLT prompt features
 
-```html
-<a href="https://github.com/copier-org/copier"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json" alt="Copier" style="max-width:100%;"/></a>
+Add these settings to question dictionaries in `copier.yml`.
+
+### Review and edit answers
+
+Set `prompt_navigation: true` at the top level of your template configuration to offer an answer-review step after the interactive questionnaire.
+
+```yaml
+prompt_navigation: true
+
+project_name:
+  type: str
+  help: Name of the new project
+
+license:
+  type: str
+  choices:
+    - MIT
+    - Apache-2.0
+    - Proprietary
 ```
 
-### Copier badge variations
+After answering the prompts, Copier JOLT asks whether the user wants to review or edit answers. If they do, it shows the questions answered during that session. Choosing a question returns to that point in the questionnaire and clears the answers from that question onward so dependent questions can be answered again.
 
-1. Badge Grayscale Border
-    [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-border.json)](https://github.com/copier-org/copier)
+This is designed for interactive use. Non-interactive runs that provide `--defaults`, `--data`, or `--data-file` continue as usual.
 
-1. Badge Grayscale Inverted Border
-    [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border.json)](https://github.com/copier-org/copier)
+### Format help and default text
 
-1. Badge Grayscale Inverted Border Orange
-    [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
+Use `[bold]...[/bold]` to emphasize text and `[color=COLOR]...[/color]` to apply a prompt-toolkit color. Formatting is supported in a question's `help` and in string `default` values.
 
-1. Badge Grayscale Inverted Border Red
-    [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-red.json)](https://github.com/copier-org/copier)
+```yaml
+service_name:
+  type: str
+  help: "Choose a [bold]unique[/bold] name. Use [color=ansiblue]lowercase letters and dashes[/color]."
+  default: "[color=ansigreen]my-service[/color]"
+```
 
-1. Badge Grayscale Inverted Border Teal
-    [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-teal.json)](https://github.com/copier-org/copier)
+The prompt displays the styled help text and a formatted default preview. The markup is presentation-only: accepting the default above saves `my-service`, never `[color=ansigreen]my-service[/color]`.
 
-1. Badge Grayscale Inverted Border Purple
-    [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-purple.json)](https://github.com/copier-org/copier)
+Colors use prompt-toolkit color names. Common choices include `ansiblue`, `ansigreen`, `ansiyellow`, `ansired`, `ansicyan`, and `ansimagenta`.
 
-1. Badge Black
-    [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-black.json)](https://github.com/copier-org/copier)
+Formatting can be combined:
 
-## Credits
+```yaml
+project_slug:
+  type: str
+  help: "[bold][color=ansiyellow]Required:[/color][/bold] use a lowercase URL-safe slug."
+  default: "[bold]sample-project[/bold]"
+```
 
-Special thanks go to [jpsca](https://github.com/jpsca) for originally creating `Copier`.
-This project would not be a thing without him.
+Keep markup well-formed by closing every `[bold]` and `[color=...]` tag. The feature only affects `help` and string defaults; it does not change the values rendered into generated files.
 
-Many thanks to [pykong](https://github.com/pykong) who took over maintainership on the
-project, promoted it, and laid out the bases of what the project is today.
+### Give non-blocking warnings
 
-Big thanks also go to [yajo](https://github.com/yajo) for his relentless zest for
-improving `Copier` even further.
+Use `warning` when an input is allowed but merits attention. Like a `validator`, it is a Jinja template that renders an empty string when no warning applies. Unlike a validator, it never blocks the user from proceeding.
 
-Thanks a lot, [pawamoy](https://github.com/pawamoy) for polishing very important rough
-edges and improving the documentation and UX a lot.
+```yaml
+project_name:
+  type: str
+  help: Project name
+  warning: >-
+    {% if project_name | length < 5 %}
+    Short names can be hard to discover later.
+    {% endif %}
+```
 
-Also special thanks to [sisp](https://github.com/sisp) for being very helpful in
-polishing documentation, fixing bugs, helping the community and cleaning up the
-codebase.
+For string questions without `choices`, the warning appears in the prompt's bottom toolbar while the user types and disappears as soon as the condition is resolved. In this example, the message clears once the name has five or more characters.
 
-And thanks to all financial supporters and folks that give us a shiny star! ⭐
+Warnings can guide users about conventions without forbidding exceptions:
 
-<!-- rumdl-capture -->
-<!-- rumdl-disable MD033 -->
-<a href="https://star-history.com/#copier-org/copier&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=copier-org/copier&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=copier-org/copier&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=copier-org/copier&type=Date" />
-  </picture>
-</a>
-<!-- rumdl-restore -->
+```yaml
+database_url:
+  type: str
+  help: Database connection URL
+  warning: >-
+    {% if database_url.startswith('postgres://') %}
+    Prefer the postgresql:// scheme for new connections.
+    {% endif %}
+```
+
+Use `validator` for requirements that must prevent submission, such as an invalid project slug; use `warning` for advice and review cues. For non-string prompts or string prompts with choices, a warning is displayed after the answer is submitted.
+
+### Build choices from a command
+
+A question can define `pre_tasks`: commands that run immediately before that question is displayed. Each task must have a `name` and a `command`. Its result becomes available to the question's templates at `_pre_tasks.<name>`.
+
+The result exposes:
+
+- `stdout` — complete standard output as text
+- `stderr` — complete standard error as text
+- `lines` — standard output split into newline-separated values
+
+For example, list network interfaces and offer them as choices:
+
+```yaml
+network_interface:
+  type: str
+  help: Select the interface this service should bind to.
+  pre_tasks:
+    - name: interfaces
+      command: [sh, -c, "ls /sys/class/net"]
+  choices: |
+    {% for interface in _pre_tasks.interfaces.lines %}
+    - {{ interface }}
+    {% endfor %}
+```
+
+Use a pre-task to derive choices from a project tool as well:
+
+```yaml
+package_manager:
+  type: str
+  pre_tasks:
+    - name: available
+      command: [sh, -c, "printf 'uv\npip\npoetry\n'"]
+  choices: |
+    {% for manager in _pre_tasks.available.lines %}
+    - {{ manager }}
+    {% endfor %}
+```
+
+Commands can be a shell-style string or an argument list. You can conditionally run a task with `when`:
+
+```yaml
+deployment_region:
+  type: str
+  pre_tasks:
+    - name: regions
+      command: [sh, -c, "./scripts/list-regions"]
+      when: "{{ cloud_provider == 'aws' }}"
+  choices: |
+    {% for region in _pre_tasks.regions.lines %}
+    - {{ region }}
+    {% endfor %}
+```
+
+> **Security:** Pre-tasks execute commands with the same permissions as the person running Copier. Only use templates you trust. Pre-tasks use the same trusted-template approval flow as normal template tasks and are skipped when running with `--skip-tasks`.
+
+## Combining the features
+
+The following example uses navigation, formatted guidance, a live warning, and dynamic choices together:
+
+```yaml
+prompt_navigation: true
+
+cloud_provider:
+  type: str
+  help: Choose where this service will run.
+  choices:
+    - AWS
+    - Local
+
+region:
+  type: str
+  help: "Select a [bold]deployment region[/bold]."
+  pre_tasks:
+    - name: regions
+      command: [sh, -c, "./scripts/list-regions"]
+      when: "{{ cloud_provider == 'AWS' }}"
+  choices: |
+    {% if cloud_provider == 'AWS' %}
+    {% for region_name in _pre_tasks.regions.lines %}
+    - {{ region_name }}
+    {% endfor %}
+    {% else %}
+    - local
+    {% endif %}
+
+service_slug:
+  type: str
+  help: "Use [color=ansicyan]lowercase letters, digits, and dashes[/color]."
+  default: "[color=ansigreen]my-service[/color]"
+  validator: >-
+    {% if not (service_slug | regex_search('^[a-z][a-z0-9-]+$')) %}
+    Start with a lowercase letter; use only lowercase letters, digits, and dashes.
+    {% endif %}
+  warning: >-
+    {% if service_slug | length < 8 %}
+    A longer service slug is usually easier to identify in logs.
+    {% endif %}
+```
+
+Here, invalid slugs are rejected by `validator`, short-but-valid slugs show an advisory warning, the available regions depend on the provider, and the final review permits corrections before rendering.
+
+## Core Copier capabilities
+
+Copier JOLT continues to support the established Copier workflow:
+
+- Render template variables in file contents, filenames, and directory names.
+- Store answers in an answers file for repeatable generation and updates.
+- Use local templates, Git repositories, Git URLs, and `gh:`/`gl:` shortcuts.
+- Pass values non-interactively with `--data` or a data file.
+- Recopy projects or update generated projects as their templates evolve.
+- Use Jinja expressions, conditions, validation, choices, secrets, and tasks in template configuration.
+
+For all command options, run:
+
+```shell
+copier --help-all
+```
+
+## Contributing and license
+
+Issues, feature requests, and contributions belong in the [Copier JOLT repository](https://github.com/landfair-biz/copier-jolt).
+
+Copier JOLT is distributed under the MIT License. See [LICENSE](LICENSE) for details.
