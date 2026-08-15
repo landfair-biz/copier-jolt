@@ -1612,3 +1612,29 @@ def test_warning_and_prompt_navigation(
     tui.expect_exact(pexpect.EOF)
     assert load_answersfile_data(dst)["project_name"] == "safe"
     assert load_answersfile_data(dst)["package_name"] == "safe-package"
+
+
+def test_inline_prompt_markup(tmp_path_factory: pytest.TempPathFactory, spawn: Spawn) -> None:
+    """Inline prompt markup styles text without becoming part of the answer."""
+    src, dst = map(tmp_path_factory.mktemp, ("src", "dst"))
+    build_file_tree(
+        {
+            (src / "copier.yml"): yaml.dump(
+                {
+                    "project_name": {
+                        "type": "str",
+                        "help": "Choose a [bold]memorable[/bold] project name.",
+                        "default": "[color=ansigreen]my-project[/color]",
+                    }
+                }
+            ),
+            (src / "{{ _copier_conf.answers_file }}.jinja"): "{{ _copier_answers|to_nice_yaml }}",
+        }
+    )
+    tui = spawn(COPIER_PATH + ("copy", str(src), str(dst)))
+    tui.expect_exact("Choose a memorable project name.")
+    tui.expect_exact("Default: ")
+    tui.expect_exact("my-project")
+    tui.sendline()
+    tui.expect_exact(pexpect.EOF)
+    assert load_answersfile_data(dst)["project_name"] == "my-project"

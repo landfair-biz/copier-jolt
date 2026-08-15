@@ -38,6 +38,7 @@ from packaging.version import Version
 from pathspec import PathSpec, __version__ as pathspec_version
 from plumbum import ProcessExecutionError, colors
 from plumbum.machines import local
+from prompt_toolkit import print_formatted_text
 from pydantic import ConfigDict, PositiveInt
 from pydantic.dataclasses import dataclass
 from pydantic_core import to_jsonable_python
@@ -663,6 +664,12 @@ class Worker:
                     continue
 
             # Display TUI and ask user interactively only without --defaults
+            if formatted_help := question.get_formatted_help():
+                print_formatted_text(formatted_help, file=sys.stderr)
+            if formatted_default := question.get_formatted_default():
+                print_formatted_text(
+                    [("", "Default: "), *formatted_default], file=sys.stderr
+                )
             try:
                 new_answer = unsafe_prompt(
                     [question.get_questionary_structure()],

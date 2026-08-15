@@ -83,16 +83,19 @@ Supported keys:
 - **style**: Prompt appearance rules for individual prompt parts. Use the
     [prompt-toolkit style format](https://python-prompt-toolkit.readthedocs.io/en/stable/pages/asking_for_input.html#colors)
     with any of `question`, `answer`, `qmark`, `pointer`, `highlighted`, and
-    `instruction`. This can make help text bold or color a default answer.
+    `instruction`.
+
+- **Inline text formatting**: In `help` and string `default` values, use `[bold]...[/bold]`
+    and `[color=COLOR]...[/color]` to style only a section of the text. `COLOR` can be
+    any prompt-toolkit color name, such as `ansiblue`, `ansigreen`, or `ansired`. Styled
+    defaults are shown in a formatted preview, and markup is not included in the saved
+    prompt value.
 
     ```yaml title="copier.yml"
     project_name:
         type: str
-        help: Enter the name shown to your users.
-        default: my-project
-        style:
-            question: "bold fg:ansiblue"
-            answer: "fg:ansiyellow"
+        help: Choose a [bold]memorable[/bold] name for your project.
+        default: "[color=ansigreen]my-project[/color]"
     ```
 
 - **choices**: To restrict possible values.

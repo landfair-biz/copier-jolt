@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import warnings
 from collections import ChainMap
 from collections.abc import Callable, Mapping, Sequence
@@ -17,6 +18,7 @@ from typing import Any, Literal
 
 import yaml
 from jinja2 import StrictUndefined, UndefinedError
+from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.styles import Style as PromptStyle
 from pydantic import ConfigDict, Field, field_validator
@@ -65,6 +67,49 @@ DEFAULT_DATA: AnyByStrDict = {
     "now": _now,
     "make_secret": _make_secret,
 }
+
+_PROMPT_MARKUP_RE = re.compile(
+    r"\[(?P<closing>/)?(?P<name>bold|color)(?:=(?P<value>[A-Za-z0-9_-]+))?\]"
+)
+
+
+def format_prompt_markup(value: str) -> tuple[FormattedText, bool]:
+    """Convert inline prompt markup into prompt-toolkit formatted text."""
+    fragments: list[tuple[str, str]] = []
+    styles: list[tuple[str, str]] = []
+    position = 0
+    found_markup = False
+    for match in _PROMPT_MARKUP_RE.finditer(value):
+        if match.start() > position:
+            style = " ".join(style for _, style in styles)
+            fragments.append((style, value[position : match.start()]))
+        name = match["name"]
+
+        if match["closing"]:
+            if styles and styles[-1][0] == name:
+                styles.pop()
+                found_markup = True
+            else:
+                fragments.append((" ".join(style for _, style in styles), match[0]))
+        elif name == "bold" and match["value"] is None:
+            styles.append((name, "bold"))
+            found_markup = True
+        elif name == "color" and (color := match["value"]):
+            styles.append((name, f"fg:{color}"))
+            found_markup = True
+        else:
+            fragments.append((" ".join(style for _, style in styles), match[0]))
+        position = match.end()
+    if position < len(value):
+        style = " ".join(style for _, style in styles)
+        fragments.append((style, value[position:]))
+    return FormattedText(fragments), found_markup
+
+
+def strip_prompt_markup(value: str) -> str:
+    """Remove supported inline markup while preserving its text content."""
+    formatted, _ = format_prompt_markup(value)
+    return "".join(text for _, text in formatted)
 
 
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
@@ -275,19 +320,19 @@ class Question:
                 return answer
             raise InvalidTypeError from error
 
-    def get_default(self) -> Any:
-        """Get the default value for this question, casted to its expected type."""
+    def get_default_raw(self) -> Any:
+        """Get the rendered default before parsing or removing prompt markup."""
         try:
-            result = self.answers.init[self.var_name]
+            return self.answers.init[self.var_name]
         except KeyError:
             try:
-                result = self.answers.last[self.var_name]
+                return self.answers.last[self.var_name]
             except KeyError:
                 try:
-                    result = self.answers.user_defaults[self.var_name]
+                    return self.answers.user_defaults[self.var_name]
                 except KeyError:
                     try:
-                        result = self.render_value(
+                        return self.render_value(
                             self.settings.defaults.get(self.var_name, self.default),
                             extra_answers={
                                 "UNSET": StrictUndefined("UNSET", exc=UnsetError)
@@ -295,8 +340,14 @@ class Question:
                         )
                     except UnsetError:
                         return MISSING
-                    if result is MISSING:
-                        return MISSING
+
+    def get_default(self) -> Any:
+        """Get default value for this question, casted to its expected type."""
+        result = self.get_default_raw()
+        if result is MISSING:
+            return MISSING
+        if isinstance(result, str):
+            result = strip_prompt_markup(result)
         result = self.parse_answer(result)
         # Computed values (i.e., `when: false`) are intentionally not validated
         # at the moment.
@@ -378,11 +429,30 @@ class Question:
             result.append(c)
         return result
 
+    def get_formatted_help(self) -> FormattedText | None:
+        """Get formatted help text when it contains inline markup."""
+        if not self.help:
+            return None
+        rendered_help = self.render_value(self.help)
+        if not isinstance(rendered_help, str):
+            return None
+        formatted, has_markup = format_prompt_markup(rendered_help)
+        return formatted if has_markup else None
+
+    def get_formatted_default(self) -> FormattedText | None:
+        """Get a formatted preview of the default when it contains inline markup."""
+        raw_default = self.get_default_raw()
+        if not isinstance(raw_default, str):
+            return None
+        formatted, has_markup = format_prompt_markup(raw_default)
+        return formatted if has_markup else None
+
     def get_message(self) -> str:
         """Get the message that will be printed to the user."""
-        if self.help and (rendered_help := self.render_value(self.help)):
-            return force_str_end(rendered_help) + "  "
-        # Otherwise, there's no help message defined.
+        if self.help and self.get_formatted_help() is None:
+            return force_str_end(self.render_value(self.help)) + "  "
+        # Otherwise, there's no help message defined or it is printed separately.
+
         message = self.var_name
         if (answer_type := self.get_type_name()) != "str":
             message += f" ({answer_type})"
