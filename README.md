@@ -167,7 +167,7 @@ project_name:
     {% endif %}
 ```
 
-For string questions without `choices`, the warning appears in the prompt's bottom toolbar while the user types and disappears as soon as the condition is resolved. Choice prompts show the warning alongside each option that triggers it. In this example, the message clears once the name has five or more characters.
+For string questions without `choices`, the warning appears in the prompt's bottom toolbar while the user types and disappears as soon as the condition is resolved. Choice prompts show the warning in the bottom toolbar for the highlighted option. In this example, the message clears once the name has five or more characters.
 
 Warnings can guide users about conventions without forbidding exceptions:
 

@@ -843,9 +843,10 @@ class Worker:
                     self.answers, question, self.template
                 ) from err
             self._record_answer(var_name, new_answer, dynamic_group)
-            if not question.supports_live_warning() and (
+            if not question.supports_toolbar_warning() and (
                 warning := question.get_warning(new_answer)
             ):
+
                 printf("warning", warning, style=Style.WARNING, file_=sys.stderr)
 
             editable_indices.add(question_index)

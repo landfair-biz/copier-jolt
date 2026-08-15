@@ -18,15 +18,19 @@ from typing import Any, Literal
 
 import yaml
 from jinja2 import StrictUndefined, UndefinedError
+from prompt_toolkit import PromptSession
 from prompt_toolkit.application import get_app
+from prompt_toolkit.filters import Condition, IsDone
 from prompt_toolkit.formatted_text import FormattedText
-
+from prompt_toolkit.layout import ConditionalContainer, HSplit, Layout, Window
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.styles import Style as PromptStyle
+
 from pydantic import ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass
 from pydantic_core.core_schema import ValidationInfo
 from pygments.lexers.data import JsonLexer, YamlLexer
+from questionary.prompts import common as questionary_common
 from questionary.prompts.common import Choice
 
 from copier._jinja_ext import SandboxedEnvironment, UnsetError
@@ -73,10 +77,50 @@ DEFAULT_DATA: AnyByStrDict = {
 _PROMPT_MARKUP_RE = re.compile(
     r"\[(?P<closing>/)?(?P<name>bold|color)(?:=(?P<value>[A-Za-z0-9_-]+))?\]"
 )
+_choice_toolbar_patch_applied = False
+
+
+def _enable_choice_warning_toolbar() -> None:
+    """Patch Questionary's layout to avoid forwarding a toolbar twice."""
+    global _choice_toolbar_patch_applied
+    if _choice_toolbar_patch_applied:
+        return
+
+    def create_inquirer_layout(
+        control: Any, get_prompt_tokens: Callable[[], list[tuple[str, str]]], **kwargs: Any
+    ) -> Layout:
+        bottom_toolbar = kwargs.pop("bottom_toolbar", None)
+        prompt = PromptSession(
+            get_prompt_tokens,
+            reserve_space_for_menu=0,
+            bottom_toolbar=bottom_toolbar,
+            **kwargs,
+        )
+        questionary_common._fix_unecessary_blank_lines(prompt)
+        validation_prompt = PromptSession(
+            bottom_toolbar=lambda: control.error_message,
+            **kwargs,
+        )
+        return Layout(
+            HSplit(
+                [
+                    prompt.layout.container,
+                    ConditionalContainer(Window(control), filter=~IsDone()),
+                    ConditionalContainer(
+                        validation_prompt.layout.container,
+                        filter=Condition(lambda: control.error_message is not None),
+                    ),
+                ]
+            )
+        )
+
+    questionary_common.create_inquirer_layout = create_inquirer_layout
+    _choice_toolbar_patch_applied = True
 
 
 def format_prompt_markup(value: str) -> tuple[FormattedText, bool]:
     """Convert inline prompt markup into prompt-toolkit formatted text."""
+
     fragments: list[tuple[str, str]] = []
     styles: list[tuple[str, str]] = []
     position = 0
@@ -434,9 +478,7 @@ class Question:
             c = Choice(name, self.render_value(value), disabled=disabled)
             # Try to cast the value according to the question's type to raise
             # an error in case the value is incompatible.
-            answer = self.cast_answer(c.value)
-            if warning := self.get_warning(answer):
-                c = Choice(f"{name} — Warning: {warning}", c.value, disabled=disabled)
+            self.cast_answer(c.value)
             result.append(c)
         return result
 
@@ -536,6 +578,9 @@ class Question:
             result["validate"] = _validate
         if self.supports_live_warning():
             result["bottom_toolbar"] = self.get_live_warning
+        elif self.choices and self.warning:
+            _enable_choice_warning_toolbar()
+            result["bottom_toolbar"] = self.get_choice_warning
         result.update({"type": questionary_type})
 
         return result
@@ -579,10 +624,30 @@ class Question:
             [("bold fg:ansiyellow", f"Warning: {warning}")] if warning else []
         )
 
+    def get_choice_warning(self) -> FormattedText:
+        """Render a warning for the choice currently highlighted in a prompt."""
+        try:
+            controls = [get_app().layout.current_control]
+            controls.extend(
+                window.content for window in get_app().layout.find_all_windows()
+            )
+            control = next(
+                control for control in controls if hasattr(control, "get_pointed_at")
+            )
+            warning = self.get_warning(self.cast_answer(control.get_pointed_at().value))
+        except Exception:  # noqa: BLE001
+            return FormattedText()
+        return FormattedText(
+            [("bold fg:ansiyellow", f"Warning: {warning}")] if warning else []
+        )
+
     def supports_live_warning(self) -> bool:
         """Whether this prompt can display a warning as the user types."""
-
         return bool(self.warning) and not self.choices and self.get_type_name() == "str"
+
+    def supports_toolbar_warning(self) -> bool:
+        """Whether this prompt shows warnings in its bottom toolbar."""
+        return self.supports_live_warning() or bool(self.choices and self.warning)
 
     def get_when(self) -> bool:
 
