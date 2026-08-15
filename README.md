@@ -11,7 +11,14 @@
 [![Documentation Status](https://img.shields.io/readthedocs/copier/latest?logo=readthedocs)](https://copier.readthedocs.io/en/latest)
 [![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20Copier%20Guru-006BFF)](https://gurubase.io/g/copier)
 
-A library and CLI app for rendering project templates.
+A JOLT-maintained library and CLI app for rendering project templates.
+Original project (which was forked) is: https://github.com/copier-org/copier
+
+This version offers several additional benefits:
+- Navigation to previous prompts
+- Ability to change text colors and formats in "help" and "default" strings
+- Added `pre_tasks` which allows users to run commands and use the output within prompts
+- Added `warning` that works similarly to `validation` but allows users to proceed
 
 - Works with **local** paths and **Git URLs**.
 - Your project can include any file and Copier can dynamically replace values in any
@@ -19,7 +26,6 @@ A library and CLI app for rendering project templates.
 - It generates a beautiful output and takes care of not overwriting existing files
     unless instructed to do so.
 
-![Sample output](https://github.com/copier-org/copier/raw/master/img/copier-output.png)
 
 ## Installation
 
